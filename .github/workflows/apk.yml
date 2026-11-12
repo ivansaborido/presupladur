@@ -28,6 +28,12 @@ jobs:
       - name: Compilar
         working-directory: android
         run: gradle assembleRelease -PvCode=${{ github.run_number }} --no-daemon
+      - name: Comprobar firma y contenido
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/apksigner verify --verbose --print-certs --min-sdk-version 24 android/app/build/outputs/apk/release/app-release.apk
+          $BT/aapt2 dump badging android/app/build/outputs/apk/release/app-release.apk | head -12
+          $BT/zipalign -c -v 4 android/app/build/outputs/apk/release/app-release.apk | tail -1
       - name: Publicar el APK
         env:
           GH_TOKEN: ${{ github.token }}
