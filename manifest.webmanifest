@@ -1,0 +1,16 @@
+{
+  "name": "PresuPladur",
+  "short_name": "PresuPladur",
+  "description": "Presupuestos de pladur en PDF, con histórico y margen de cada trabajo",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EDEFF0",
+  "theme_color": "#0B5CB8",
+  "lang": "es",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
