@@ -560,6 +560,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 <script>
 "use strict";
 /* ============ utilidades ============ */
+const NAT=window.Android||null; // puente con la app Android (APK); en el navegador no existe
+const aB64=blob=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(String(f.result).split(',')[1]);f.readAsDataURL(blob)});
 const $=(s,r=document)=>r.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num=v=>{if(typeof v==='number')return isFinite(v)?v:0;let s=String(v??'').trim().replace(/\s|€/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const x=parseFloat(s);return isFinite(x)?x:0};
@@ -835,12 +837,15 @@ function construirPDF(p){
   for(let i=1;i<=n;i++){doc.setPage(i);f('normal',8,[140,140,140]);doc.text('Presupuesto '+p.numero,M,H-10);doc.text('Página '+i+' de '+n,W-M,H-10,{align:'right'})}
   return doc;
 }
-function descargar(blob,nombre){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
-function sacarPDF(p){descargar(construirPDF(p).output('blob'),nombrePDF(p));toast('PDF descargado: '+nombrePDF(p))}
+function descargar(blob,nombre){
+  if(NAT){aB64(blob).then(d=>/\.pdf$/i.test(nombre)?NAT.abrir(d,nombre,'application/pdf'):NAT.compartir(d,nombre,/\.csv$/i.test(nombre)?'text/csv':'application/json',''));return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
+function sacarPDF(p){descargar(construirPDF(p).output('blob'),nombrePDF(p));toast(NAT?'Abriendo el PDF':'PDF descargado: '+nombrePDF(p))}
 function textoWA(p){const t=totales(p),n=(p.cliente.nombre||'').trim().split(' ')[0];
   return`Hola${n?' '+n:''}, te paso el presupuesto ${p.numero}${p.tipo?' de '+p.tipo.replace(/\.$/,'').toLowerCase():''}. Total: ${eur(t.total)}${p.iva==='no'?' más IVA':' con IVA incluido'}. Tiene una validez de ${p.validez||30} días. Cualquier duda me dices.${S.empresa.nombre?'\n'+S.empresa.nombre:''}`}
 async function enviarWA(p){
   const blob=construirPDF(p).output('blob'),nombre=nombrePDF(p),texto=textoWA(p);
+  if(NAT){NAT.compartir(await aB64(blob),nombre,'application/pdf',texto);marcarEnviado(p);return}
   let file=null;try{file=new File([blob],nombre,{type:'application/pdf'})}catch(e){}
   if(file&&navigator.canShare&&navigator.canShare({files:[file]})){
     try{await navigator.share({files:[file],title:'Presupuesto '+p.numero,text:texto});marcarEnviado(p);return}
@@ -952,7 +957,7 @@ function vAjustes(){
     <ol style="padding-left:20px;margin:0">
       <li>En <b>Ajustes</b> pon tus datos una sola vez.</li>
       <li>En <b>Presupuesto</b> escribe el cliente y elige los trabajos de tus tarifas.</li>
-      <li>Si no quieres escribir, toca el micrófono de cualquier casilla y díctalo. Con <b>Dictar un trabajo</b> dices cantidad, trabajo y precio de una vez. Hace falta internet y Chrome.</li>
+      <li>Si no quieres escribir, toca el micrófono de cualquier casilla y díctalo. Con <b>Dictar un trabajo</b> dices cantidad, trabajo y precio de una vez. Hace falta internet.</li>
       <li>En <b>Fotos de la obra</b> haz una foto con la cámara o elígela de la galería. Salen al final del PDF.</li>
       <li>En la parte amarilla apunta materiales y gastos para ver lo que ganas.</li>
       <li>Pulsa <b>WhatsApp</b> para mandar el PDF al cliente.</li>
@@ -962,7 +967,7 @@ function vAjustes(){
 }
 
 /* ============ voz ============ */
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition,VOZ=!!SR;
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition,VOZ=!!SR||!!NAT;
 const ICO_MIC='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></svg>';
 const cap=t=>t?t.charAt(0).toUpperCase()+t.slice(1):t;
 const sinTildes=t=>t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -977,6 +982,7 @@ function ponerMicros(){
 }
 let rec=null;
 function escuchar(boton,alTerminar){
+  if(NAT){boton.classList.add('on');window._vozNativa=t=>{boton.classList.remove('on');window._vozNativa=null;if(t&&t.trim())alTerminar(t.trim())};NAT.dictar();return}
   if(rec){rec.abort();return}
   rec=new SR();rec.lang='es-ES';rec.interimResults=false;rec.maxAlternatives=1;
   let dicho='';
@@ -1073,7 +1079,7 @@ document.addEventListener('click',e=>{
     quitarLogo(){S.empresa.logo='';guardar();pintar()},
     exportar(){S.ultimaCopia=Date.now();guardar();const fichero='PresuPladur_copia_'+hoy()+'.json',datos=JSON.stringify({...S,_fotos:FOTOS});let fl=null;try{fl=new File([datos],fichero,{type:'application/json'})}catch(x){}
       if(fl&&navigator.canShare&&navigator.canShare({files:[fl]})&&matchMedia('(pointer:coarse)').matches){navigator.share({files:[fl],title:'Copia de PresuPladur'}).catch(()=>{});if(vista==='historico'||vista==='ajustes')pintar();return}
-      if(vista==='historico'||vista==='ajustes')setTimeout(pintar,50);descargar(new Blob([JSON.stringify({...S,_fotos:FOTOS})],{type:'application/json'}),'PresuPladur_copia_'+hoy()+'.json');toast('Copia descargada. Guárdala en un sitio seguro.')},
+      if(vista==='historico'||vista==='ajustes')setTimeout(pintar,50);descargar(new Blob([JSON.stringify({...S,_fotos:FOTOS})],{type:'application/json'}),'PresuPladur_copia_'+hoy()+'.json');toast(NAT?'Elige dónde guardar la copia: Drive, WhatsApp o correo.':'Copia descargada. Guárdala en un sitio seguro.')},
     importar(){$('#fImport').click()},
     csv(){const f=[['Número','Fecha','Cliente','Obra','Estado','Base','IVA','Total','Costes','Beneficio','Margen %']];S.presupuestos.forEach(p=>{const t=totales(p);f.push([p.numero,fechaCorta(p.fecha),p.cliente.nombre,p.ubicacion,ESTADOS[p.estado],miles(t.base).replace(/\./g,''),miles(t.iva).replace(/\./g,''),miles(t.total).replace(/\./g,''),miles(t.coste).replace(/\./g,''),miles(t.benef).replace(/\./g,''),miles(t.margen*100,1)])});descargar(new Blob(['﻿'+f.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(';')).join('\r\n')],{type:'text/csv'}),'PresuPladur_historico_'+hoy()+'.csv')}
   };
@@ -1085,7 +1091,8 @@ function verTip(e){const r=e.target.closest&&e.target.closest('[data-tip]');if(!
 document.addEventListener('pointermove',verTip);document.addEventListener('pointerdown',verTip);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarHoja()});
 
-if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
+window._atras=()=>{if($('#velo').classList.contains('abierto')){cerrarHoja();return true}if(vista!=='nuevo'){ir('nuevo');return true}return false};
+if(!NAT&&'serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 pintar();
 abrirIDB().then(()=>{const c=$('#fotos');if(c)c.innerHTML=fotosHTML()});
 </script>

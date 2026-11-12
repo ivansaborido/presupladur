@@ -1,0 +1,38 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'android/**', '.github/workflows/apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Meter la app web dentro del APK
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp index.html android/app/src/main/assets/index.html
+      - name: Compilar
+        working-directory: android
+        run: gradle assembleRelease -PvCode=${{ github.run_number }} --no-daemon
+      - name: Publicar el APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk PresuPladur.apk
+          gh release create "v${{ github.run_number }}" PresuPladur.apk \
+            --title "PresuPladur 1.${{ github.run_number }}" \
+            --notes "APK para instalar en Android. Si ya tienes una versión anterior, esta se instala encima y conserva los presupuestos."
